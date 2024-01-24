@@ -18,32 +18,68 @@ class CamHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type','multipart/x-mixed-replace; boundary=--jpgboundary')
             self.end_headers()
+
+            stereo = cv2.StereoSGBM_create()
+            
+            numDisparities = 5 * 16
+            blockSize = 6 * 2+ 5
+            P1 = 0
+            P2 = 395
+            disp12MaxDiff = 19 
+            minDisparity = 2
+
+            stereo.setNumDisparities(numDisparities)
+            stereo.setBlockSize(blockSize)
+            stereo.setP1(P1)
+            stereo.setP2(P2)
+            stereo.setDisp12MaxDiff(disp12MaxDiff)
+            stereo.setMinDisparity(minDisparity)
             while True:
                 try:
-                    camera_matrix_left = np.array([[423.38047293,   0.        , 367.10500348],
-                                                [  0.        , 726.30866529, 267.70218356],
-                                                [  0.        ,   0.        ,   1.        ]])
-                    camera_matrix_right = np.array([[851.79411711,   0.        , 409.01096518],
-                                                [  0.        , 832.54482296, 208.88240441],
-                                                [  0.        ,   0.        ,   1.        ]])
+                    
                     rc_l, img_left = capture_left.read()
                     rc_r, img_right = capture_right.read()
-                    img_left=cv2.cvtColor(img_left, cv2.COLOR_BGR2GRAY)
-                    img_right=cv2.cvtColor(img_right, cv2.COLOR_BGR2GRAY)
+                    imgL_gray=cv2.cvtColor(img_left, cv2.COLOR_BGR2GRAY)
+                    imgR_gray=cv2.cvtColor(img_right, cv2.COLOR_BGR2GRAY)
+                    Left_nice= cv2.remap(imgL_gray,
+                                        Left_Stereo_Map_x,
+                                        Left_Stereo_Map_y,
+                                        cv2.INTER_LANCZOS4,
+                                        cv2.BORDER_CONSTANT,
+                                        0)
+                    
+                    Right_nice= cv2.remap(imgR_gray,
+                                            Right_Stereo_Map_x,
+                                            Right_Stereo_Map_y,
+                                            cv2.INTER_LANCZOS4,
+                                            cv2.BORDER_CONSTANT,
+                                            0)
                     print(rc_l, rc_r)
                     # img_left = cv2.resize(img_left, (416, 416))
                     # img_right = cv2.resize(img_right, (416, 416))
                     #dst_left = cv2.undistort(img_left, camera_matrix_left, dist_coefs_left, None, camera_matrix_left)
                     #dst_right = cv2.undistort(img_right, camera_matrix_right, dist_coefs_right, None, camera_matrix_right)
-                    stereo = cv2.StereoBM_create(numDisparities=16, blockSize=15)
-                    disparity = stereo.compute(img_left, img_right)
-                    disparity.astype(np.float32)
-                    vis = disparity
+                    vis = img_left
+                    print(type(vis))
                     print(vis.shape)
-                    
-                    vis = cv2.cvtColor(vis, cv2.COLOR_BGR2GRAY)
-                    if not rc_l:
-                    	 continue
+                    print(vis)
+                    disparity = stereo.compute(Left_nice, Right_nice)
+                    disparity = disparity.astype(np.float32)
+                    disparity = (disparity/16.0 - minDisparity)/numDisparities
+                    print(type(disparity))
+                    print(disparity.shape)
+                    #vis=cv2.cvtColor(disparity, cv2.COLOR_GRAY2BGR)
+                    #norm_image = cv2.normalize(disparity, None, alpha = 0, beta = 1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+                    #disparity = np.resize(disparity, (480, 640, 3))
+                    #disparity = cv2.normalize(disparity, disparity, alpha=255,
+                     #         beta=0, norm_type=cv2.NORM_MINMAX)
+                    cv2.imshow("disp",disparity)
+                    #cv2.imwrite('disp.ipg', disparity)
+                    #disparity = cv2.imride('disp.ipg')
+                    vis = disparity
+                    print(type(vis))
+                    print(vis.shape)
+                    print(vis)
                     jpg = Image.fromarray(vis)
                     tmpFile = BytesIO()
                     jpg.save(tmpFile,'JPEG')
@@ -69,7 +105,7 @@ class CamHandler(BaseHTTPRequestHandler):
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 	"""Handle requests in a separate thread."""
 
-CAP_WIDTH = 480
+CAP_WIDTH = 640
 CAP_HEIGHT = 480
 
 if __name__ == "__main__":
@@ -97,6 +133,16 @@ if __name__ == "__main__":
 
     capture_left = cv2.VideoCapture(CAPTURE_PIPE_l, cv2.CAP_GSTREAMER)
     capture_right = cv2.VideoCapture(CAPTURE_PIPE_r, cv2.CAP_GSTREAMER)
+    cv_file = cv2.FileStorage("calibration/rectify_map_imx219_160deg_1080p_new.yaml", cv2.FILE_STORAGE_READ)
+    global Left_Stereo_Map_x 
+    global Left_Stereo_Map_y 
+    global Right_Stereo_Map_x 
+    global Right_Stereo_Map_y 
+    Left_Stereo_Map_x = cv_file.getNode("map_l_1").mat()
+    Left_Stereo_Map_y = cv_file.getNode("map_l_2").mat()
+    Right_Stereo_Map_x = cv_file.getNode("map_r_1").mat()
+    Right_Stereo_Map_y = cv_file.getNode("map_r_2").mat()
+    cv_file.release()
 
     try:
         while True:

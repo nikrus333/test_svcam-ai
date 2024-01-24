@@ -27,17 +27,21 @@ if __name__ == "__main__":
     capture_left = cv2.VideoCapture(CAPTURE_PIPE_l, cv2.CAP_GSTREAMER)
     capture_right = cv2.VideoCapture(CAPTURE_PIPE_r, cv2.CAP_GSTREAMER)
     count = 0
+    count_image = 0
 
     try:
         while True:
             rc_l, img_left = capture_left.read()
             rc_r, img_right = capture_right.read()
-            cv2.imwrite("stereo_left/{number}.png".format(number=count),img_left)
-            cv2.imwrite("stereo_right/{number}.png".format(number=count),img_right)
+            if count % 10 == 0:
+                cv2.imwrite("stereo_left/{number}.png".format(number=count_image),img_left)
+                cv2.imwrite("stereo_right/{number}.png".format(number=count_image),img_right)
+                count_image += 1
             count += 1
+            
             print('space for next step')
             #input()
-            time.sleep(1)
+            time.sleep(0.2)
             
     except KeyboardInterrupt:
         print("keyboard interrupt")
